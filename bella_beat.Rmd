@@ -1,0 +1,995 @@
+---
+title: "Bella Beat"
+author: "Maike"
+date: "22/09/2021"
+version: "1.1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+![Bella Beat  App](img/bella_beat_app.jpg){#id .class width=350 height=250px align=center} ![Bella Beat Time](img/bella_beat_time.jpg){#id .class width=350 height=250px align=center} ![Bella Beat Spring](img/bella_beat_spring.png){#id .class width=350 height=250px align=center} ![Bella Beat Leaf](img/bella_beat_leaf.jpg){#id .class width=350 height=250px align=center} 
+
+--------------------------------------------------------------------------------
+
+
+```{r Libs, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(magrittr)
+library(padr)
+library(ggplot2)
+library(gridExtra)
+```
+
+# 1. Import Data {.tabset}
+<hr>
+<div style="text-align: justify" font-size: 50px>
+First of all, viewing the datasets names, we see three different frequencies of data: hourly, minutes, seconds and one without frequency. 
+<br>
+</div>
+
+## Daily
+
+
+```{r message=FALSE, warning=FALSE}
+file_path <- 'data/Fitabase Data 4.12.16-5.12.16'
+
+# Daily data
+activity_daily <-
+  read.csv(paste(file_path, 'dailyActivity_merged.csv', sep = '/'))
+calories_daily <-
+  read.csv(paste(file_path, 'dailyCalories_merged.csv', sep = '/'))
+intensities_daily <-
+  read.csv(paste(file_path, 'dailyIntensities_merged.csv', sep = '/'))
+steps_daily <-
+  read.csv(paste(file_path, 'dailySteps_merged.csv', sep = '/'))
+sleep_daily <-
+  read.csv(paste(file_path, 'sleepDay_merged.csv', sep = '/'))
+```
+
+## Hourly
+
+```{r message=FALSE, warning=FALSE}
+# Hourly data
+calories_hourly <-
+  read.csv(paste(file_path, 'hourlyCalories_merged.csv', sep = '/'))
+intensities_hourly <-
+  read.csv(paste(file_path, 'hourlyIntensities_merged.csv', sep = '/'))
+steps_hourly <-
+  read.csv(paste(file_path, 'hourlySteps_merged.csv', sep = '/'))
+```
+
+## Every minute
+
+```{r message=FALSE, warning=FALSE}
+# Every minute data
+caloriesNarrow_minute <-
+  read.csv(paste(file_path, 'minuteCaloriesNarrow_merged.csv', sep = '/'))
+caloriesWide_minute <-
+  read.csv(paste(file_path, 'minuteCaloriesWide_merged.csv', sep = '/'))
+intensitiesNarrow_minute <-
+  read.csv(paste(file_path, 'minuteIntensitiesNarrow_merged.csv', sep = '/'))
+intensitiesWide_minute <-
+  read.csv(paste(file_path, 'minuteIntensitiesWide_merged.csv', sep = '/'))
+stepsNarrow_minute <-
+  read.csv(paste(file_path, 'minuteStepsNarrow_merged.csv', sep = '/'))
+stepsWide_minute <-
+  read.csv(paste(file_path, 'minuteStepsWide_merged.csv', sep = '/'))
+sleep_minute <-
+  read.csv(paste(file_path, 'minuteSleep_merged.csv', sep = '/'))
+metabolic_minute <-
+  read.csv(paste(file_path, 'minuteMETsNarrow_merged.csv', sep = '/'))
+```
+
+## Other frequencies
+
+```{r message=FALSE, warning=FALSE}
+# Others
+weight_log <-
+  read.csv(paste(file_path, 'weightLogInfo_merged.csv', sep = '/'))
+heartrate_seconds <-
+  read.csv(paste(file_path, 'heartrate_seconds_merged.csv', sep = '/'))
+```
+# 2. Prepare Data {.tabset}
+<hr>
+<div style="text-align: justify"> 
+
+Using **Excel/Google Sheets** and looking at data, we can have some first impression of data like size, format, content. Before exploring data in more detail, we can prepare some data based on this first impressions. 
+
+First of all, we have three main types of datasets: daily data, hourly data, minute data. **Sleep**, **Heart rate** and **METs** (Metabolic Equivalents), are not available in minutes, hourly, or daily datasets. So we'll resample these datasets by minutes, hours, and days, hence having more data to compare.
+<br>
+</div>
+
+
+## Sleep data
+
+```{r message=FALSE, warning=FALSE}
+# Convert 'date' column to 'POSIXct' type
+sleep_minute %<>% mutate(date = parse_date_time(date, "%m/%d/%Y %H:%M:%S %p"))
+
+# Create a new df by resampling by average of 'value'
+
+
+# Using summarise, by mean, max, min, the column 'value' has no meaning, but if we count the values of each hour, seems to be number of minutes in bed, with a lot of '60' values. So i just assume that 'value' column means 'TimeInBed'
+sleep_hourly <-
+  sleep_minute %>% thicken('hour') %>% group_by(Id, date_hour) %>% summarise(MinutesInBed = sum(value / value))
+
+```
+
+## Heart rate data
+
+```{r message=FALSE, warning=FALSE}
+# Convert 'Time' column to 'POSIXct' type
+heartrate_seconds %<>% mutate(Time = parse_date_time(Time, "%m/%d/%Y %H:%M:%S %p"))
+
+# Create a new df by resample average, max, and min 'heartrate' per minute
+heartrate_minute <-
+  heartrate_seconds %>% thicken("min") %>% group_by(Id, Time_min) %>% summarise(
+    AverageBPM = mean(Value),
+    MaxBPM = max(Value),
+    MinBPM = min(Value)
+  )
+
+# Create a new df by resample average, max, and min heartrate per hour
+heartrate_hourly <-
+  heartrate_seconds %>% thicken("hour") %>% group_by(Id, Time_hour) %>% summarise(
+    AverageBPM = mean(Value),
+    MaxBPM = max(Value),
+    MinBPM = min(Value)
+  )
+
+# Create a new df by resample average, max, and min heartrate per day
+heartrate_daily <-
+  heartrate_seconds %>% thicken("day") %>% group_by(Id, Time_day) %>% summarise(
+    AverageBPM = mean(Value),
+    MaxBPM = max(Value),
+    MinBPM = min(Value)
+  )
+```
+
+## Metabolic data
+
+```{r message=FALSE, warning=FALSE}
+# Convert 'ActivityMinute' column to 'POSIXct' type
+metabolic_minute %<>% mutate(ActivityMinute = parse_date_time(ActivityMinute, "%m/%d/%Y %H:%M:%S %p"))
+
+# Metabolic equivalent is mensured on a scale from 0 to >10. I will infer this data is scale by 10x
+metabolic_minute %<>% mutate(METs = METs/10)
+
+metabolic_hourly <-
+  metabolic_minute %>% thicken('hour') %>% group_by(Id, ActivityMinute_hour) %>% summarise(
+    AverageMETs = mean(METs),
+    MaxMETs = max(METs),
+    Min_METs = min(METs)
+  )
+
+metabolic_daily <-
+  metabolic_minute %>% thicken('day') %>% group_by(Id, ActivityMinute_day) %>% summarise(
+    AverageMETs = mean(METs),
+    MaxMETs = max(METs),
+    MinMETs = min(METs)
+  )
+```
+
+# Let's look at **daily** data! 
+<hr>
+<div style="text-align: justify">
+Now, I'm going to look at the datasets and figure out the best way to handle them.
+</div>
+
+## {.tabset}
+
+### Activity dataset
+```{r message=FALSE, warning=FALSE}
+as_tibble(activity_daily)
+```
+
+### Calories dataset
+```{r message=FALSE, warning=FALSE}
+as_tibble(calories_daily)
+```
+
+### Intensities dataset
+```{r message=FALSE, warning=FALSE}
+as_tibble(intensities_daily)
+```
+
+### Steps dataset
+```{r message=FALSE, warning=FALSE}
+as_tibble(steps_daily)
+```
+
+### Sleep dataset
+```{r message=FALSE, warning=FALSE}
+as_tibble(sleep_daily)
+```
+
+### Heart rate dataset
+```{r message=FALSE, warning=FALSE}
+as_tibble(heartrate_daily)
+```
+
+### Metabolic dataset
+```{r message=FALSE, warning=FALSE}
+as_tibble(metabolic_daily)
+```
+
+#
+
+
+### {.tabset}
+
+#### Activity columns
+```{r}
+colnames(activity_daily)
+```
+
+#### Calories columns
+```{r}
+colnames(calories_daily)
+```
+
+#### Intensities columns
+```{r}
+colnames(intensities_daily)
+```
+
+#### Steps columns
+```{r}
+colnames(steps_daily)
+```
+
+#### Sleep columns
+```{r}
+colnames(sleep_daily)
+```
+
+#### Heart rate columns
+```{r}
+colnames(heartrate_daily)
+```
+
+#### Metabolic columns
+```{r}
+colnames(metabolic_daily)
+```
+
+#
+
+<div style="text-align: justify">
+The _activity_daily_ dataset has a set of variables, some of those variables are present in others datasets like _calories_daily_ and _steps_daily_, let's detail:<br>
+_activity_daily_ columns:<br>
+
+**Id** - User identifier<br>
+**ActivityDate** - Date in format 'mdy'<br>
+**Calories** - Calories lost during activity<br>
+**TotalSteps** - Number of steps during activity<br>
+**TotalDistance** - Travelled distance<br>
+**TrackerDistance** - Likely GPS distance<br>
+**LoggedActivitiesDistance** - User input distance<br>
+**Distance and minutes** of activities categorized in:<br>
+  - (VeryActiveDistance, FairlyActiveMinutes)<br>
+  - (MoreratelyActiveDistance,  <span style="color: red;">Not available</span>)<br>
+  - (LightActiveDistance, LightlyActiveMinutes)<br>
+  - (SedentaryActiveDistance, SedentaryMinutes)<br>
+ </div>
+
+<div style="text-align: justify">
+Check if _steps_daily_, _calories_daily_ and _intensities_daily_ has been derived from _activity_daily_.
+</div>
+
+## {.tabset}
+
+### Calories
+```{r}
+# Verify if 'activity_daily' and 'calories_daily' data are the same
+all.equal(activity_daily$Calories, calories_daily$Calories)
+```
+
+### Steps
+```{r}
+# Verify if 'activity_daily' and 'steps_daily' data are the same
+all.equal(activity_daily$TotalSteps, steps_daily$StepTotal)
+```
+
+### Intensities {.tabset}
+#### Distance
+##### Activity Effort {.tabset}
+
+###### Strong
+```{r}
+# Verify if 'activity_daily' intensities and 'intensities_daily' data are the same
+#   distance intensities
+all.equal(activity_daily$VeryActiveDistance,
+          intensities_daily$VeryActiveDistance)
+```
+
+###### Moderate
+```{r}
+all.equal(
+  activity_daily$ModeratelyActiveDistance,
+  intensities_daily$ModeratelyActiveDistance)
+```
+
+###### Light
+```{r}
+all.equal(activity_daily$LightActiveDistance,intensities_daily$LightActiveDistance)
+```
+
+###### Sedentary
+```{r}
+all.equal(
+  activity_daily$SedentaryActiveDistance,
+  intensities_daily$SedentaryActiveDistance
+)
+```
+
+#### Time
+##### Activity Effort {.tabset}
+
+###### Strong
+```{r}
+#   time intensities
+all.equal(activity_daily$VeryActiveMinutes,
+          intensities_daily$VeryActiveMinutes)
+```
+
+###### Light
+```{r}
+all.equal(activity_daily$LightlyActiveMinutes,
+          intensities_daily$LightlyActiveMinutes)
+```
+
+###### Sedentary
+```{r}
+all.equal(activity_daily$SedentaryMinutes,
+          intensities_daily$SedentaryMinutes)
+
+```
+#
+
+<div style="text-align: justify">
+All the data are present in _activity_daily_ datasets except _sleep_daily_, _heartrate_daily_, and _metabolic_daily_ so, let's unload unnecessary data and verify if we can merge these datasets with _activity_daily_
+</div>
+```{r}
+# Unload unnecessary datasets
+rm(intensities_daily, calories_daily, steps_daily)
+```
+
+#### ID's in each dataset
+
+<div style="text-align: justify">
+_activity_daily_, and _metabolic_daily_ has 33 different ID's, _sleep_daily_ has 24 different ID's, and _heartrate_daily_ has only 14 different  ID's.
+</div>
+
+## {.tabset}
+
+### Activity
+```{r}
+# Verify number of unique ID's
+length(unique(activity_daily$Id))
+```
+
+### Sleep
+```{r}
+length(unique(sleep_daily$Id))
+```
+
+### Heart rate
+```{r}
+length(unique(heartrate_daily$Id))
+```
+
+### Metabolic
+```{r}
+length(unique(metabolic_daily$Id))
+```
+#
+
+#### Merge data {.tabset}
+##### 1. Convert type
+```{r}
+# Convert Datetime columns from <chr> to <POSIXct>
+activity_daily %<>% mutate(ActivityDate = as.Date(ActivityDate, format = "%m/%d/%Y"))
+sleep_daily %<>% mutate(SleepDay = as.Date(SleepDay, format = "%m/%d/%Y %H:%M:%S %p"))
+```
+##### 2. Activity + Sleep
+```{r}
+daily_data <-
+  merge(
+    x = activity_daily,
+    y = sleep_daily,
+    by.x = c('Id', 'ActivityDate'),
+    by.y = c('Id', 'SleepDay'),
+    all.x = TRUE)
+```
+##### 3. Activity + Sleep + Heart_Rate
+```{r}
+daily_data <-
+  merge(
+    x = daily_data,
+    y = heartrate_daily,
+    by.x = c('Id', 'ActivityDate'),
+    by.y = c('Id', 'Time_day'),
+    all.x = TRUE
+  )
+```
+##### 4. Activity + Sleep+ Heart_Rate + Metabolic
+```{r}
+
+daily_data <-
+  merge(
+    x = daily_data,
+    y = metabolic_daily,
+    by.x = c('Id', 'ActivityDate'),
+    by.y = c('Id', 'ActivityMinute_day'),
+    all.x = TRUE
+  )
+```
+##### 5. Fill NA values
+```{r}
+# Filling missing values
+daily_data[is.na(daily_data)] <- -999
+```
+##### 6. Store resulted dataset in a file
+```{r}
+write.csv(daily_data, 'data/merged_data/daily_data.csv')
+```
+##### 7. Daily Data preview
+```{r}
+as_tibble(daily_data)
+```
+#
+
+# Let's look at **hourly** data!
+
+## {.tabset}
+
+### Calories
+```{r}
+as_tibble(calories_hourly)
+```
+
+### Intensities
+```{r}
+as_tibble(intensities_hourly)
+```
+
+### Steps
+```{r}
+as_tibble(steps_hourly)
+```
+
+### Sleep
+```{r}
+as_tibble(sleep_hourly)
+```
+
+### Heart rate
+```{r}
+as_tibble(heartrate_hourly)
+```
+
+### Metabolic
+```{r}
+as_tibble(metabolic_hourly)
+```
+#
+
+#### Merge data {.tabset}
+##### 1. Convert type
+```{r}
+# Convert datetime columns to 'POSIXct' type
+calories_hourly %<>% mutate(ActivityHour = parse_date_time(ActivityHour, "%m/%d/%Y %H:%M:%S %p"))
+intensities_hourly %<>% mutate(ActivityHour = parse_date_time(ActivityHour, "%m/%d/%Y %H:%M:%S %p"))
+steps_hourly %<>% mutate(ActivityHour = parse_date_time(ActivityHour, "%m/%d/%Y %H:%M:%S %p"))
+```
+##### 2. Rename columns
+```{r}
+# Rename columns
+names(sleep_hourly)[2] <- "SleepHour"
+names(heartrate_hourly)[2]  <- "TimeHour"
+names(metabolic_hourly)[2]  <- "ActivityHour"
+```
+##### 3. Calories + Intensities
+```{r}
+hourly_data <-
+  merge(
+    x = calories_hourly,
+    y = intensities_hourly,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'ActivityHour'),
+    all.x = TRUE
+  )
+```
+##### 4. Calories + Intensities + Steps
+```{r}
+hourly_data <-
+  merge(
+    x = hourly_data,
+    y = steps_hourly,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'ActivityHour'),
+    all.x = TRUE
+  )
+```
+##### 5. Calories + Intensities + Steps + Sleep
+```{r}
+hourly_data <-
+  merge(
+    x = hourly_data,
+    y = sleep_hourly,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'SleepHour'),
+    all.x = TRUE
+  )
+```
+##### 6. Calories + Intensities + Steps + Sleep + Heart_rate
+```{r}
+hourly_data <-
+  merge(
+    x = hourly_data,
+    y = heartrate_hourly,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'TimeHour'),
+    all.x = TRUE
+  )
+```
+##### 7. Calories + Intensities + Steps + Sleep + Heart_rate + Metabolic
+```{r}
+hourly_data <-
+  merge(
+    x = hourly_data,
+    y = metabolic_hourly,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'ActivityHour'),
+    all.x = TRUE
+  )
+```
+##### 8. Fill NA values
+```{r}
+# Fill na values
+hourly_data[is.na(hourly_data)] <- -999
+```
+#### 9. Store resulted dataset in a file
+```{r}
+write.csv(hourly_data,'data/merged_data/hourly_data.csv')
+```
+##### 10. Hourly Data Preview 
+```{r}
+as_tibble(hourly_data)
+```
+
+# Let's look at minute data!
+<div style="text-align: justify">
+The _caloriesWide_minute_ dataset has **1,325,580 entries**, and _caloriesNarrow_minute_ has  21,645 entries and 60 columns to each minute, totalizing **1,298,700 entries**, this shows that Narrow dataset has more information than Wide.
+I'll pivot Wide dataset to longer format and merge with _caloriesWide_minute_. This will ensure that we'll not lost data entries.
+<br>
+</div>
+
+#### Merge Narrow and Wide Datasets{.tabset}
+##### Calories
+```{r}
+# Convert 'ActiviyHour' column to 'POSIXct' type
+caloriesWide_minute %<>% mutate(ActivityHour = parse_date_time(ActivityHour, "%m/%d/%Y %H:%M:%S %p"))
+caloriesNarrow_minute %<>% mutate(ActivityMinute = parse_date_time(ActivityMinute, "%m/%d/%Y %H:%M:%S %p"))
+
+# Pivot Wide dataset
+calories_pivoted <- pivot_longer(caloriesWide_minute,
+             cols= 'Calories00':'Calories59',
+             names_to = NULL,
+             values_to = 'Calories') %>% group_by(Id, ActivityHour) %>% mutate(ActivityHour = ActivityHour + minutes(row_number()-1))
+
+# Change Datatime column name to merge easier
+names(caloriesNarrow_minute)[2] <- 'ActivityHour'
+
+# Merge Wide data pivoted and Narrow data
+calories_minute <- merge(caloriesNarrow_minute, calories_pivoted, by=c('Id','ActivityHour'), all.x=TRUE)
+
+# Combine resulting columns into one
+calories_minute <- calories_minute %>% mutate(Calories = ifelse(is.na(Calories.y), Calories.x, Calories.y))
+
+# Delete old columns
+calories_minute$Calories.x <- NULL
+calories_minute$Calories.y <- NULL
+```
+##### Intensities
+<div style="text-align: justify">
+The same occurs to _intensities_, and _steps_ minute datasets, so I'll repeat the approach. 
+</div>
+```{r}
+# Convert 'ActiviyHour' column to 'POSIXct' type
+intensitiesWide_minute %<>% mutate(ActivityHour = parse_date_time(ActivityHour, "%m/%d/%Y %H:%M:%S %p"))
+intensitiesNarrow_minute %<>% mutate(ActivityMinute = parse_date_time(ActivityMinute, "%m/%d/%Y %H:%M:%S %p"))
+
+# Pivot Wide dataset
+intensities_pivoted <- pivot_longer(intensitiesWide_minute,
+             cols= 'Intensity00':'Intensity59',
+             names_to = NULL,
+             values_to = 'Intensity') %>% group_by(Id, ActivityHour) %>% mutate(ActivityHour = ActivityHour + minutes(row_number()-1))
+
+
+# Change Datatime column name to merge easier
+names(intensitiesNarrow_minute)[2] <- 'ActivityHour'
+
+# Merge Wide data pivoted and Narrow data
+intensities_minute <- merge(intensitiesNarrow_minute, intensities_pivoted, by=c('Id','ActivityHour'), all.x=TRUE)
+
+# Combine resulting columns into one
+intensities_minute <- intensities_minute %>% mutate(Intensity = ifelse(is.na(Intensity.y), Intensity.x, Intensity.y))
+
+# Delete old columns
+intensities_minute$Intensity.x <- NULL
+intensities_minute$Intensity.y <- NULL
+```
+
+##### Steps
+```{r}
+# Convert 'ActiviyHour' column to 'POSIXct' type
+stepsWide_minute %<>% mutate(ActivityHour = parse_date_time(ActivityHour, "%m/%d/%Y %H:%M:%S %p"))
+stepsNarrow_minute %<>% mutate(ActivityMinute = parse_date_time(ActivityMinute, "%m/%d/%Y %H:%M:%S %p"))
+
+# Pivot Wide dataset
+steps_pivoted <- pivot_longer(stepsWide_minute,
+             cols= 'Steps00':'Steps59',
+             names_to = NULL,
+             values_to = 'Steps') %>% group_by(Id, ActivityHour) %>% mutate(ActivityHour = ActivityHour + minutes(row_number()-1))
+
+
+# Change Datatime column name to merge easier
+names(stepsNarrow_minute)[2] <- 'ActivityHour'
+
+# Merge Wide data pivoted and Narrow data
+steps_minute <- merge(stepsNarrow_minute, steps_pivoted, by=c('Id','ActivityHour'), all.x=TRUE)
+
+# Combine resulting columns into one
+steps_minute <- steps_minute %>% mutate(Steps = ifelse(is.na(Steps.y), Steps.x, Steps.y))
+
+# Delete old columns
+steps_minute$Steps.x <- NULL
+steps_minute$Steps.y <- NULL
+```
+#
+
+#### {.tabset}
+##### Calories
+```{r}
+as_tibble(calories_minute)
+```
+
+##### Intensities
+```{r}
+as_tibble(intensities_minute)
+```
+
+##### Steps
+```{r}
+as_tibble(steps_minute)
+```
+
+##### Sleep
+```{r}
+as_tibble(sleep_minute)
+```
+
+##### Heart rate
+```{r}
+as_tibble(heartrate_minute)
+```
+
+##### Metabolic
+```{r}
+as_tibble(metabolic_minute)
+```
+
+#### Merge Minute datasets
+<div style="text-align: justify">
+Now i'll merge all minute datasets.
+</div>
+#### {.tabset}
+
+##### 1. Calories + Intensities
+```{r}
+minute_data <-
+  merge(
+    x = calories_minute,
+    y = intensities_minute,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'ActivityHour'),
+    all.x = TRUE
+  )
+```
+
+##### 2. Calories + Intensities + Steps
+```{r}
+minute_data <-
+  merge(
+    x = minute_data,
+    y = steps_minute,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'ActivityHour'),
+    all.x = TRUE
+  )
+```
+
+##### 3. Calories + Intensities + Steps + Sleep
+```{r}
+names(sleep_minute)[3] <- 'Sleep_value'
+names(sleep_minute)[4] <- 'Sleep_log_ID'
+
+minute_data <-
+  merge(
+    x = minute_data,
+    y = sleep_minute,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'date'),
+    all.x = TRUE
+  )
+```
+
+
+##### 4. Calories + Intensities + Steps + Sleep + Heart_Rate
+
+```{r}
+minute_data <-
+  merge(
+    x = minute_data,
+    y = heartrate_minute,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'Time_min'),
+    all.x = TRUE
+  )
+```
+
+##### 5. Calories + Intensities + Steps + Sleep + Heart_Rate + Metabolic
+```{r}
+minute_data <-
+  merge(
+    x = minute_data,
+    y = metabolic_minute,
+    by.x = c('Id', 'ActivityHour'),
+    by.y = c('Id', 'ActivityMinute'),
+    all.x = TRUE
+  )
+```
+
+##### 6. Fill NA values
+```{r}
+# Fill na values
+minute_data[is.na(minute_data)] <- -999
+```
+
+##### 7. Store resulted dataset in a file 
+```{r}
+write.csv(minute_data,'data/merged_data/minute_data.csv')
+```
+
+##### 8. Preview Minute Data
+```{r}
+as_tibble(minute_data)
+```
+
+# 3. Build features.
+<hr>
+#### Minute data {.tabset}
+
+##### Categorize METs
+<div style="text-align: justify">
+We will categorize METs using as reference: <br>
+<https://www.researchgate.net/publication/265609419_Sedentary_Behaviour_and_Stroke_Foundational_Knowledge_is_Crucial/figures>
+</div>
+```{r}
+minute_data$ExpendEnergyRate <- cut(minute_data$METs, breaks = c(-1, 1.5,2.9,5.9, 100))
+levels(minute_data$ExpendEnergyRate) <- c("Very Low", "Low","Medium","High")
+
+hourly_data$ExpendEnergyRate <- cut(hourly_data$AverageMETs, breaks = c(-1, 1.5,2.9,5.9, 100))
+levels(hourly_data$ExpendEnergyRate) <- c("Very Low", "Low","Medium","High")
+
+daily_data$ExpendEnergyRate <- cut(daily_data$AverageMETs, breaks = c(-1, 1.5,2.9,5.9, 100))
+levels(daily_data$ExpendEnergyRate) <- c("Very Low", "Low","Medium","High")
+```
+
+##### Categorize Effort
+```{r}
+minute_data$Effort <- cut(minute_data$Intensity, breaks = c(-1,0,1,2,3))
+levels(minute_data$Effort) <- c("Sedentary", "Light", "Moderate","Vigorous")
+
+hourly_data$Effort <- cut(hourly_data$AverageIntensity, breaks = c(-1,0,1,2,3))
+levels(hourly_data$Effort) <- c("Sedentary", "Light", "Moderate","Vigorous")
+```
+#
+
+# 4. Analyse.
+<hr>
+<div style="text-align: justify">
+First of all, we need a context, to understand users behavior, and how Bella Beat accompanies them in their day-to-day
+</div>
+
+### When users are just sitting, or reading, and when they are running or riding a bike? {.tabset}
+
+<div style="text-align: justify">
+They sleep from 11 pm to 7 am, some of them take a little nap after 1 pm. They are most likely **sedentary**. With an average of __400 Steps/Hour__ between 8 am and 8 pm, with represents an average of __6.6 Steps/Minute__. 
+
+Calories and METs data confirm their sedentarism. With roughly 120 Calories/Hour, calories consumed by activities like Yoga and Work Standing, with METs that corresponds to the ratio of expending energy roughly about 1.5 METs.
+
+They are most often just **moving in their home or workplace**, instead of running or practicing a sport, with is not good for health.
+
+</div>
+
+#### Sleep during days
+```{r}
+ggp_sleep <- hourly_data %>% filter(MinutesInBed != -999) %>%  ggplot(aes(x=hour(ActivityHour), y=MinutesInBed))+geom_smooth() + coord_polar(start=0) + scale_x_continuous(breaks = 1:23) + xlab('Hour') + ylab('Average Time in bed per Hour')
+ggp_sleep
+```
+
+#### Steps during days
+```{r message=FALSE, warning=FALSE}
+ggp_steps <- hourly_data %>% ggplot(aes(x=hour(ActivityHour), y=StepTotal))+geom_smooth()+ coord_polar( start=0) + scale_x_continuous(breaks = 0:24, limits=c(0,24)) + xlab('Hour') + ylab('Average Steps') + labs(title="Average Steps during day")
+ggp_steps
+```
+
+#### Calories during days
+```{r message=FALSE, warning=FALSE}
+ggp_cal <- hourly_data %>% filter(Calories!=-999) %>% ggplot(aes(x=hour(ActivityHour), y=Calories))+geom_smooth()+ coord_polar(clip='on', start=0) + scale_x_continuous(breaks = 0:24, limits=c(0,24)) + xlab('Hour') + ylab('Calories') + labs(title='Calories during day')
+ggp_cal
+```
+
+#### Effort/METs during days
+```{r}
+ggp_cal <- hourly_data %>% filter(AverageMETs != -999) %>% ggplot(aes(x=hour(ActivityHour), y=AverageMETs))+geom_smooth()+ coord_polar(clip='on', start=0) + scale_x_continuous(breaks = 0:24, limits=c(0,24)) + xlab('Hour') + ylab('Average METs') + labs(title='Average METs during day')
+ggp_cal
+```
+#
+
+### But it's not like users never run  {.tabset}
+
+#### Effort vs Energy Expend Rate
+
+<div style="text-align: justify">
+if we look to each minute of his days during all period, we'll discover that they have been spent an average of:<br>
+  - **25 Days** in **Sedentary** equivalent effort.<br>
+  - **4 days** in **Light** effort.<br>
+  - **6 hours** in **Moderate** effort.<br>
+  - **10 hours** in **Vigorous** effort.<br>
+
+</div>
+
+```{r message=FALSE, warning=FALSE}
+options(scipen = 999)
+
+## Filter off Id with less than 30000 entries
+fltr <- minute_data %>% group_by(Id) %>% summarise(entries=n()) %>% filter(entries<30000)
+
+## List of IDS with less than 30000 entries
+id_rm <- c(2347167796,3372868164, 4057192912, 8253242879)
+
+id_rm[1]
+## Filtered data
+fltrd_data <- minute_data %>% filter(Id != id_rm[1]) %>% 
+                filter(Id != id_rm[2]) %>%
+                filter(Id != id_rm[3]) %>%
+                filter(Id != id_rm[4])
+
+#fltrd_data %>% group_by(Id,Effort) %>% summarise(n())
+
+## Number of IDS
+n_ids <- length(unique(fltrd_data$Id))
+min_to_hour <- 60
+hour_to_day <- 24
+
+## Show Effort in time Spent (Hours)
+fltrd_data %>% group_by(Effort) %>% summarise(Average_Hours = (n()/n_ids)/(min_to_hour))
+## Show Effort in time Spend (Days)
+#fltrd_data %>% group_by(Effort) %>% summarise(Average_Days = (n()/n_ids)/(min_to_hour*hour_to_day))
+```
+#
+
+### Statistics Distribuition {.tabset}
+
+#### Calories
+```{r}
+ggp1 <- hourly_data %>% ggplot(aes(x=hour(ActivityHour), y=Calories),group=1) + geom_point() + geom_smooth()
+ggp2 <- hourly_data %>% ggplot(aes(x=hour(ActivityHour), y=Calories),group=1) + geom_boxplot(aes(group = hour(ActivityHour)))
+grid.arrange(ggp1, ggp2, ncol = 2)
+```
+
+#### Effort by hour
+```{r}
+ggp1 <- hourly_data %>% filter(AverageMETs != -999) %>%  ggplot(aes(hour(ActivityHour), AverageMETs)) + geom_point() + geom_smooth()
+ggp2 <- hourly_data %>% filter(AverageMETs != -999) %>%  ggplot(aes(hour(ActivityHour), AverageMETs)) + geom_boxplot(aes(group = hour(ActivityHour)))
+grid.arrange(ggp1, ggp2, ncol=2)
+```
+
+#### Steps by hour
+```{r}
+ggp1 <- hourly_data %>% ggplot(aes(hour(ActivityHour), StepTotal)) + geom_point() + geom_smooth()
+ggp2 <- hourly_data %>% ggplot(aes(hour(ActivityHour), StepTotal)) + geom_boxplot(aes(group = hour(ActivityHour)))
+grid.arrange(ggp1, ggp2, ncol=2)
+```
+
+#### Heart rate by Hour
+```{r}
+ggp1 <- hourly_data %>% filter(AverageBPM != -999) %>% ggplot(aes(hour(ActivityHour),AverageBPM)) + geom_point() + geom_smooth() + labs(title='Scatter Plot' ) 
+ggp2 <- hourly_data %>% filter(AverageBPM != -999) %>% ggplot(aes(hour(ActivityHour),AverageBPM)) + geom_boxplot(aes(group = hour(ActivityHour))) + labs(title='Boxplot' )
+
+grid.arrange(ggp1, ggp2, ncol=2)
+```
+
+#
+
+###  How about the month? {.tabset}
+
+<div style="text-align: justify">
+Trends shows that they slowed down even more, walking less, traveling a shorter distance, and spending less calories. This 
+
+</div>
+
+#### Period trend
+```{r message=FALSE, warning=FALSE}
+ggp1 <- daily_data %>% ggplot(aes(ActivityDate, TotalSteps)) + geom_smooth(color="#E69F00", size=1) + xlab("Day") + ylab("Steps")
+ggp2 <- daily_data %>% ggplot(aes(ActivityDate, Calories)) + geom_smooth(color='#00a5e6') + xlab("Day") + ylab("Calories")
+ggp3 <- daily_data %>% ggplot(aes(ActivityDate, TotalDistance)) + geom_smooth(color='#1ec95d') + xlab("Day") + ylab("Distance")
+grid.arrange(ggp1,ggp2,ggp3, nrow=3)
+```
+
+#### How much effort?
+```{r message=FALSE, warning=FALSE}
+ggp1 <- daily_data %>% filter(AverageBPM != -999) %>% ggplot(aes(ActivityDate, AverageBPM)) + geom_smooth(color='#c41630') + xlab('Day') + ylab("Average Heart Rate (BPM)")
+ggp2 <- daily_data %>% filter(AverageMETs != -999) %>% ggplot(aes(ActivityDate, AverageMETs)) + geom_smooth(color='#c416bf') + xlab('Day') + ylab("Average METs") 
+grid.arrange(ggp1,ggp2, nrow=2)
+
+```
+
+#
+
+### What's the decisive factor to lost calories? {.tabset}
+
+#### Calories and Steps
+```{r message=FALSE, warning=FALSE}
+ggp1 <- daily_data %>% ggplot(aes(TotalSteps, Calories)) + geom_point() + geom_smooth() + xlab('Steps per day') + ylab('Calories per day')
+ggp1
+```
+
+#### Calories and Distance
+```{r message=FALSE, warning=FALSE}
+ggp2 <- daily_data %>% filter(AverageBPM != -999) %>%   ggplot(aes(TotalDistance, Calories)) + geom_point() + geom_smooth()
+ggp2
+```
+#
+
+# Report:
+
+<div style="text-align: justify">
+They seem to be using Bella Beat devices at work or home. They are just sitting and **working**, **reading** or **studying** what is good, they're improving themselves, building their careers. But his **health is in danger** data show that they have very **sedentary habits**. Some of them may run, ride a cycle, or goes to the gym, but the great majority are very sedentary.
+
+We can help them, we can notify them when they spent many hours in sedentary mode, schedule exercises, help them to achieve their weight goals through calories report.
+
+Women are more worried about their health than men, If we give them tools that help them, they'll do the rest.
+
+Bella Beat gadgets are very good friends of women! They just need to be remembered!
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
